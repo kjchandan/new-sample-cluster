@@ -166,7 +166,6 @@ app.get('/metrics', async (req, res) => {
   res.end(await client.register.metrics());
 });
 
-// Start server
 app.listen(port, '0.0.0.0', () => {
-  console.log(\`App running on http://0.0.0.0:\${port}\`);
+  console.log(`App running on http://0.0.0.0:${port}`);
 });
