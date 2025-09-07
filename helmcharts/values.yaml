@@ -2,7 +2,7 @@ name: nodejs-app
 replicaCount: 1
 image:
   repository: azpeclusteracrpe.azurecr.io/nodejs-app
-  tag: 7fe51cd
+  tag: 5a322e8
 service:
   type: NodePort
   port: 3000
