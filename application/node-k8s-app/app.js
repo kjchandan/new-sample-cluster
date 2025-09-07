@@ -4,20 +4,6 @@ const client = require('prom-client');
 const app = express();
 const port = process.env.PORT || 3000;
 
-// Create a custom metric
-const requestCount = new client.Counter({
-  name: 'http_requests_total',
-  help: 'Total number of HTTP requests'
-});
-
-app.get('/', (req, res) => {
-  requestCount.inc();
-  const express = require('express');
-const client = require('prom-client');
-
-const app = express();
-const port = process.env.PORT || 3000;
-
 // Create a custom Prometheus counter metric
 const requestCount = new client.Counter({
   name: 'http_requests_total',
@@ -31,8 +17,8 @@ app.get('/', (req, res) => {
   res.send(`<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Welcome to the Golden Path!</title>
   <style>
     body {
@@ -172,7 +158,6 @@ app.get('/', (req, res) => {
   </script>
 </body>
 </html>`);
- 
 });
 
 // Metrics endpoint
@@ -181,7 +166,7 @@ app.get('/metrics', async (req, res) => {
   res.end(await client.register.metrics());
 });
 
+// Start server
 app.listen(port, '0.0.0.0', () => {
-  console.log(`App running on http://0.0.0.0:${port}`);
+  console.log(\`App running on http://0.0.0.0:\${port}\`);
 });
- 
