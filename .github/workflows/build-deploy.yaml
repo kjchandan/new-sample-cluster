@@ -1,0 +1,163 @@
+name: Build-Deployment
+
+on:
+  push:
+    branches:
+      # - main
+      - 'feature/**'
+  # workflow_dispatch:
+
+jobs:
+  Image-build-and-deploy:
+    runs-on: ubuntu-latest
+    permissions: write-all
+    steps:
+    - name: Check out the repo
+      uses: actions/checkout@v3
+      with:
+        persist-credentials: true 
+
+    - name: Azure Login
+      uses: azure/login@v1
+      with:
+        creds: |
+          {
+              "clientId": "657f814b-9667-4e5a-a3d4-3f264ff38bb4",
+              "clientSecret": "7Rl8Q~EN-qc.DDOlXI6KrkJkpEhfGVa392YsGcwG",
+              "subscriptionId": "05276564-4a5f-40d6-b156-3ed5768e3bf3",
+              "tenantId": "8196ddea-f6c5-4044-8209-53ad1fdaebbf",
+              "activeDirectoryEndpointUrl": "https://login.microsoftonline.com",
+              "resourceManagerEndpointUrl": "https://management.azure.com/",
+              "activeDirectoryGraphResourceId": "https://graph.windows.net/",
+              "sqlManagementEndpointUrl": "https://management.core.windows.net:8443/",
+              "galleryEndpointUrl": "https://gallery.azure.com/",
+              "managementEndpointUrl": "https://management.core.windows.net/"
+            }
+            
+    - name: Docker login
+      run: az acr login --name azpeclusteracrpe
+
+    - name: Build Docker image
+      run: |
+        CURRENT_TAG=$(echo $(git rev-parse --short HEAD))
+        echo ${CURRENT_TAG}
+        cd $PWD/application/node-k8s-app
+        docker build -t azpeclusteracrpe.azurecr.io/nodejs-app:${CURRENT_TAG} .
+        docker push azpeclusteracrpe.azurecr.io/nodejs-app:${CURRENT_TAG}
+
+    - name: update tag
+      run: | 
+        CURRENT_TAG=$(git rev-parse --short HEAD)
+        echo "Current tag: ${CURRENT_TAG}"
+        
+        cd helmcharts
+        sed -i "s/tag: .*/tag: ${CURRENT_TAG}/" values.yaml
+
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+
+        git add values.yaml
+        git commit -m "Update image tag to ${CURRENT_TAG}" || echo "No changes to commit"
+        git push origin main
+
+    - name: deploy
+      run: |
+        cd helmcharts
+        az aks get-credentials --resource-group rg-cp-pe-pattern --name az-pe-cluster --overwrite-existing --admin
+        kubectl apply -f application.yaml -n argocd
+        
+    # - name: Deploy
+    #   run: |
+    #     CURRENT_TAG=$(echo $(git rev-parse --short HEAD))
+    #     echo ${CURRENT_TAG}
+    #     cd helmcharts
+    #     az aks get-credentials --resource-group rg-cp-pe-pattern-poc4 --name az-pe-cluster --overwrite-existing --admin
+    #     kubectl apply -f application.yaml -n argocd
+        # helm upgrade --install nodejs-app . -f values.yaml --set image.tag=${CURRENT_TAG} --debug
+        # kubectl get pod
+        # kubectl get svc 
+        # kubectl get event
+        # helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+        # helm repo update
+
+        # helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx --namespace ingress-nginx --create-namespace
+        # kubectl get pods -n ingress-nginx
+        # kubectl describe svc ingress-nginx-controller -n ingress-nginx
+        # kubectl get events -n ingress-nginx --sort-by=.metadata.creationTimestamp
+    # - name: Get LoadBalancer External IP
+    #   run: |
+    #     IP=""
+    #     for i in {1..20}; do
+    #       IP=$(kubectl get svc nodejs-app -n default -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+    #       if [ -z "$IP" ]; then
+    #         echo "Waiting for external IP..."
+    #         sleep 15
+    #       else
+    #         break
+    #       fi
+    #     done
+    #     echo "External IP: $IP"
+    #     echo "LOADBALANCER_IP=$IP" >> $GITHUB_ENV
+    
+    # - name: Show External IP
+    #   run: echo "Your app is available at http://"
+
+    # - name: Build and push Docker image
+    #   run: |
+    #     cd $PWD/node-k8s-app
+    #     docker build -f Dockerfile -t /node-k8s-app:latest .
+    
+    # - name: Run Trivy vulnerability scanner
+    #   uses: aquasecurity/trivy-action@0.28.0
+    #   with:
+    #     image-ref: 'rakshithamayya/nodejs-app:latest'
+    #     output: trivy-report.json
+    #     format: json
+    #     exit-code: '1'
+    #     ignore-unfixed: true
+    #     vuln-type: 'os,library'
+    #     severity: 'CRITICAL,HIGH'
+    #   continue-on-error: true
+
+    # - name: Upload Vulnerability Scan Results
+    #   uses: actions/upload-artifact@v4
+    #   with:
+    #     name: trivy-report
+    #     path: trivy-report.json
+    #     retention-days: 30
+    
+    # - name: Build and push Docker image
+    #   run: |
+    #     CURRENT_TAG=$(echo $(git rev-parse --short HEAD))
+    #     echo ${CURRENT_TAG}
+    #     cd $PWD/application/node-k8s-app
+    #     docker build -f Dockerfile -t /node-k8s-app:${CURRENT_TAG} .
+    #     echo "" | docker login -u "" --password-stdin
+        # docker push /node-k8s-app:${CURRENT_TAG}
+        # echo "/node-k8s-app:${CURRENT_TAG} is pushed"
+
+  # kubeconform:
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - name: Checkout code
+  #       uses: actions/checkout@v3
+
+  #     - name: Install kubeconform
+  #       run: |
+  #         curl -L https://github.com/yannh/kubeconform/releases/latest/download/kubeconform-linux-amd64.tar.gz | tar xz
+  #         sudo mv kubeconform /usr/local/bin/
+
+      # - name: Validate manifests
+      #   run: |
+      #     kubeconform -strict -summary -output json $(find . -name '*.yaml')
+      #   continue-on-error: true
+          
+  # Deploy:
+  #   runs-on: self-hosted
+  #   steps:
+  #   - name: Checkout Repository
+  #     uses: actions/checkout@v2
+
+  #   - name: deploy
+  #     run: |
+  #       kubectl apply -f application.yaml -n argocd

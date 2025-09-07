@@ -1,0 +1,22 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: az-pe-cluster
+  description: Sample cluster
+  annotations:
+    github.com/project-slug: kjchandan/new-sample-cluster
+    backstage.io/techdocs-ref: dir:.
+  tags:
+    - azure
+    - aks
+    - kubernetes
+    - infrastructure
+  links:
+    - url: https://portal.azure.com/#blade/HubsExtension/BrowseResource/resourceType/Microsoft.ContainerService%2FManagedClusters
+      title: Azure AKS Clusters
+      icon: cloud
+spec:
+  type: infrastructure
+  lifecycle: experimental
+  owner: user:kjchandan
+ 

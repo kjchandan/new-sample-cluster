@@ -1,0 +1,152 @@
+name: Deploy IaC template
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  TF_VERSION: 1.5.0
+jobs:
+  terraform:
+    permissions: write-all
+    name: 'Terraform'
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        shell: bash
+        # working-directory: Infrastructure
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: 
+
+    # - name: Azure Login
+    #   uses: azure/login@v1
+    #   with:
+    #     creds: |
+    #       {
+    #           "clientId": "657f814b-9667-4e5a-a3d4-3f264ff38bb4",
+    #           "clientSecret": "7Rl8Q~EN-qc.DDOlXI6KrkJkpEhfGVa392YsGcwG",
+    #           "subscriptionId": "05276564-4a5f-40d6-b156-3ed5768e3bf3",
+    #           "tenantId": "8196ddea-f6c5-4044-8209-53ad1fdaebbf",
+    #           "activeDirectoryEndpointUrl": "https://login.microsoftonline.com",
+    #           "resourceManagerEndpointUrl": "https://management.azure.com/",
+    #           "activeDirectoryGraphResourceId": "https://graph.windows.net/",
+    #           "sqlManagementEndpointUrl": "https://management.core.windows.net:8443/",
+    #           "galleryEndpointUrl": "https://gallery.azure.com/",
+    #           "managementEndpointUrl": "https://management.core.windows.net/"
+    #         }
+
+    - name: Set Terraform environment variables
+      run: |
+        echo "ARM_CLIENT_ID=657f814b-9667-4e5a-a3d4-3f264ff38bb4" >> $GITHUB_ENV
+        echo "ARM_CLIENT_SECRET=7Rl8Q~EN-qc.DDOlXI6KrkJkpEhfGVa392YsGcwG" >> $GITHUB_ENV
+        echo "ARM_SUBSCRIPTION_ID=05276564-4a5f-40d6-b156-3ed5768e3bf3" >> $GITHUB_ENV
+        echo "ARM_TENANT_ID=8196ddea-f6c5-4044-8209-53ad1fdaebb" >> $GITHUB_ENV
+
+    # - name: Terraform fmt
+    #   id: fmt
+    #   run: terraform fmt -check
+    #   continue-on-error: true
+
+    - name: Terraform Init
+      id: init
+      run: |
+        echo "$PWD"
+        cd $PWD/Infrastructure
+        terraform init
+
+    - name: Terraform Validate
+      id: validate
+      run: |
+        cd $PWD/Infrastructure
+        terraform validate -no-color
+
+    # - name: Terraform Plan
+    #   id: plan
+    #   run: |
+    #     cd $PWD/Infrastructure
+    #     terraform plan -no-color -input=false
+    #   continue-on-error: true
+
+    # - name: Terraform Plan Status
+    #   if: steps.plan.outcome == 'failure'
+    #   run: exit 1
+
+    - name: Terraform Apply
+      run: |
+        cd $PWD/Infrastructure
+        terraform apply -auto-approve -input=false
+    # - name: Terraform destroy
+    #   run: |
+    #     cd $PWD/Infrastructure
+    #     terraform destroy -auto-approve -input=false
+
+    - name: Azure Login
+      uses: azure/login@v1
+      with:
+        creds: |
+          {
+              "clientId": "657f814b-9667-4e5a-a3d4-3f264ff38bb4",
+              "clientSecret": "7Rl8Q~EN-qc.DDOlXI6KrkJkpEhfGVa392YsGcwG",
+              "subscriptionId": "05276564-4a5f-40d6-b156-3ed5768e3bf3",
+              "tenantId": "8196ddea-f6c5-4044-8209-53ad1fdaebbf",
+              "activeDirectoryEndpointUrl": "https://login.microsoftonline.com",
+              "resourceManagerEndpointUrl": "https://management.azure.com/",
+              "activeDirectoryGraphResourceId": "https://graph.windows.net/",
+              "sqlManagementEndpointUrl": "https://management.core.windows.net:8443/",
+              "galleryEndpointUrl": "https://gallery.azure.com/",
+              "managementEndpointUrl": "https://management.core.windows.net/"
+            }
+
+    - name: Docker login
+      run: az acr login --name azpeclusteracrpe
+
+    - name: Build Docker image
+      run: |
+        CURRENT_TAG=$(echo $(git rev-parse --short HEAD))
+        echo ${CURRENT_TAG}
+        cd $PWD/application/node-k8s-app
+        docker build -t azpeclusteracrpe.azurecr.io/nodejs-app:${CURRENT_TAG} .
+        docker push azpeclusteracrpe.azurecr.io/nodejs-app:${CURRENT_TAG}
+
+    - name: update tag
+      run: | 
+        CURRENT_TAG=$(git rev-parse --short HEAD)
+        echo "Current tag: ${CURRENT_TAG}"
+        
+        cd helmcharts
+        sed -i "s/tag: .*/tag: ${CURRENT_TAG}/" values.yaml
+
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+
+        git add values.yaml
+        git commit -m "Update image tag to ${CURRENT_TAG}" || echo "No changes to commit"
+        git push origin main
+
+    - name: deploy
+      run: |
+        cd helmcharts
+        az aks get-credentials --resource-group rg-cp-pe-pattern --name az-pe-cluster --overwrite-existing --admin
+        kubectl apply -f application.yaml -n argocd
+
+
+    # - name: Terraform Destroy
+    #   run: terraform destroy -auto-approve -input=false
+
+    # - name: Get Terraform Outputs
+    #   if: (github.ref == 'refs/heads/main' && github.event_name == 'push') || github.event.inputs.action == 'apply'
+    #   id: outputs
+    #   run: |
+    #     echo "instance_id=$(terraform output -raw instance_id)" >> $GITHUB_OUTPUT
+    #     echo "instance_public_ip=$(terraform output -raw instance_public_ip)" >> $GITHUB_OUTPUT
+    #     echo "ssh_command=$(terraform output -raw ssh_connection_command)" >> $GITHUB_OUTPUT
